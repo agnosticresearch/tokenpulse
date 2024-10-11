@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain Weekly Top Tokens</title>
+    <link rel="icon" href="/static/logo.png" type="image/x-icon">
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; } /* Light site background */
+        .chart-container { background-color: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 30px; padding: 20px; }
+        h1, h2 { color: #3C3C3D; }  /* Ethereum's primary color */
+        h3 { font-size: 18px; margin-top: 0; color: #666; }
+        .bar { cursor: pointer; }
+        .bar:hover { opacity: 0.8; }
+        .bar-label { font-size: 12px; }
+        .value-label { font-size: 12px; fill: black; }
+        .value-label.large-bar {fill: white;}
+        .value-label.small-bar {fill: black;}
+        .chart-icon { font-size: 12px; cursor: pointer; }
+        .axis-label { font-size: 14px; }
+        a { color: inherit; text-decoration: none; }
+        .buttons { margin-bottom: 20px; }
+        button { margin-right: 10px; padding: 10px; background-color: #3C3C3D; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #2a2a2b; }
+        #floating-image {
+            position: fixed;
+            bottom: 10px;  /* Adjust the position from the bottom */
+            right: 10px;   /* Adjust the position from the right */
+            width: 200px;  /* Adjust the size of the image */
+            height: auto;
+            z-index: 1000; /* Ensure it stays on top */
+            }
+    </style>
+</head>
+<body>
+    <h1>Blockchain Weekly Top 15 Tokens</h1>
+
+    <!-- Buttons to select the chain -->
+    <div class="buttons">
+        <button onclick="loadCharts('ethereum')">Ethereum</button>
+        <button onclick="loadCharts('base')">Base</button>
+        <button onclick="loadCharts('polygon')">Polygon</button>
+        <button onclick="loadCharts('arbitrum')">Arbitrum</button> <!-- Added Arbitrum -->
+    </div>
+
+    <div class="chart-container" id="growthChartContainer">
+        <h2>Top 15 Tokens by Unique User Growth Percentage</h2>
+        <svg id="growthChart" width="760" height="600"></svg>
+    </div>
+
+    <div class="chart-container" id="transactionsChartContainer">
+        <h2>Top 15 Tokens by Total Transaction Volume</h2>
+        <svg id="transactionsChart" width="760" height="600"></svg>
+    </div>
+
+    <script>
+        // Chain-specific URLs, colors, and chart background colors
+        const chainUrls = {
+            ethereum: {
+                explorer: "https://etherscan.io",
+                nftscan: "https://eth.nftscan.com",
+                dexscreener: "https://dexscreener.com/ethereum",
+                barColor: "#3C3C3D",
+                bgColor: "#f1f8e9"  // Ethereum background color
+            },
+            polygon: {
+                explorer: "https://polygonscan.com",
+                nftscan: "https://polygon.nftscan.com",
+                dexscreener: "https://dexscreener.com/polygon",
+                barColor: "#8247E5",
+                bgColor: "#f3e5f5"  // Polygon background color
+            },
+            base: {
+                explorer: "https://basescan.org",
+                nftscan: "https://base.nftscan.com",
+                dexscreener: "https://dexscreener.com/base",
+                barColor: "#0052FF",
+                bgColor: "#e0f7fa"  // Base background color
+            },
+            arbitrum: {
+                explorer: "https://arbiscan.io",
+                nftscan: "https://arbitrum.nftscan.com",
+                dexscreener: "https://dexscreener.com/arbitrum",
+                barColor: "#1C39BB",
+                bgColor: "#e3f2fd"  // Arbitrum background color
+            }
+        };
+
+        // Fetch data from API
+        async function fetchData(chain) {
+            const response = await fetch(`https://token-pulse-4c9e7163d991.herokuapp.com/data/${chain}`);
+            if (!response.ok) {
+                throw new Error("Data fetch error");
+            }
+            return response.json();
+        }
+
+        function createChart(svgId, data, valuePrefix = "", isGrowthChart = false, chain = "ethereum") {
+        const svg = document.getElementById(svgId);
+        const width = 760;
+        const height = 600;
+        const margin = { top: 20, right: 30, bottom: 40, left: 200 };
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+
+        // Clear existing content
+        while (svg.firstChild) {
+            svg.removeChild(svg.firstChild);
+        }
+
+        const maxValue = Math.max(...data.map(d => Math.abs(d.value)));
+        const yScale = (i) => margin.top + (i * (chartHeight / data.length));
+        const xScale = (val) => (Math.abs(val) / maxValue) * chartWidth;
+        const chainInfo = chainUrls[chain] || chainUrls['ethereum'];
+
+        data.forEach((d, i) => {
+            const barGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const explorerUrl = `${chainInfo.explorer}/token/${d.address}`;
+            const barLink = document.createElementNS("http://www.w3.org/2000/svg", "a");
+            barLink.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", explorerUrl);
+            barLink.setAttribute("target", "_blank");
+
+            const barWidth = xScale(d.value);
+            const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            bar.setAttribute("x", margin.left);
+            bar.setAttribute("y", yScale(i));
+            bar.setAttribute("width", barWidth);
+            bar.setAttribute("height", chartHeight / data.length - 5);
+            bar.setAttribute("class", "bar");
+            bar.setAttribute("fill", chainInfo.barColor);
+            barLink.appendChild(bar);
+            barGroup.appendChild(barLink);
+
+            // Token name (address label)
+            const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            label.setAttribute("x", margin.left - 17);
+            label.setAttribute("y", yScale(i) + (chartHeight / data.length / 2));
+            label.setAttribute("text-anchor", "end");
+            label.setAttribute("alignment-baseline", "middle");
+            label.setAttribute("class", "bar-label");
+            label.setAttribute("fill", "black");
+            label.setAttribute("font-size", "10px");  // Reduce font size to fit better
+            label.textContent = d.name;
+            barGroup.appendChild(label);
+
+            // Numerical label (inside the bars)
+            const value = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            const valueText = isGrowthChart ? `${d.value.toLocaleString()}%` : d.value.toLocaleString();
+            value.setAttribute("y", yScale(i) + (chartHeight / data.length / 2));
+            value.setAttribute("alignment-baseline", "middle");
+            value.setAttribute("font-size", "10px");  // Reduce the font size for better fit
+
+            // Position the numerical label based on bar size
+            if (barWidth > 50) {
+                value.setAttribute("x", margin.left + barWidth - 5);
+                value.setAttribute("text-anchor", "end");
+                value.setAttribute("fill", "white");
+                value.classList.add("large-bar");
+            } else {
+                value.setAttribute("x", margin.left + barWidth + 5);
+                value.setAttribute("text-anchor", "start");
+                value.setAttribute("fill", "black");
+                value.classList.add("small-bar");
+            }
+            value.textContent = valueText;
+            barGroup.appendChild(value);
+
+            // Chart icon
+            const chartIcon = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            chartIcon.setAttribute("x", margin.left - 7);
+            chartIcon.setAttribute("y", yScale(i) + (chartHeight / data.length / 2));
+            chartIcon.setAttribute("text-anchor", "middle");
+            chartIcon.setAttribute("alignment-baseline", "middle");
+            chartIcon.setAttribute("class", "chart-icon");
+            chartIcon.textContent = "📊";
+            chartIcon.style.cursor = "pointer";
+            chartIcon.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    const chartUrl = d.type === "ERC-721"
+                        ? `${chainInfo.nftscan}/${d.address}`
+                        : `${chainInfo.dexscreener}/${d.address}`;
+                    window.open(chartUrl, "_blank");
+                });
+            barGroup.appendChild(chartIcon);
+
+            svg.appendChild(barGroup);
+        });
+
+        // X-axis and Y-axis
+        const xAxis = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        xAxis.setAttribute("x1", margin.left);
+        xAxis.setAttribute("y1", height - margin.bottom);
+        xAxis.setAttribute("x2", width - margin.right);
+        xAxis.setAttribute("y2", height - margin.bottom);
+        xAxis.setAttribute("stroke", "black");
+        svg.appendChild(xAxis);
+
+        const yAxis = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        yAxis.setAttribute("x1", margin.left);
+        yAxis.setAttribute("y1", margin.top);
+        yAxis.setAttribute("x2", margin.left);
+        yAxis.setAttribute("y2", height - margin.bottom);
+        yAxis.setAttribute("stroke", "black");
+        svg.appendChild(yAxis);
+    }
+
+
+
+        // Function to transform growth data
+        function transformGrowthData(data) {
+            return data.map(item => {
+                let growthPercentage = 0;
+
+                if (item.previous_week_unique_addresses > 0) {
+                    growthPercentage = ((item.current_week_unique_addresses - item.previous_week_unique_addresses) / item.previous_week_unique_addresses) * 100;
+                }
+
+                return {
+                    name: item.label,
+                    value: growthPercentage.toFixed(2),
+                    address: item.token_address,
+                    type: item.token_type
+                };
+            }).sort((a, b) => b.value - a.value).slice(0, 15);  // Limit to 15 items
+        }
+
+        // Function to transform transaction data
+        function transformTransactionsData(data) {
+            return data.map(item => ({
+                name: item.label,
+                value: item.total_transaction_growth,
+                address: item.token_address,
+                type: item.token_type
+            })).sort((a, b) => b.value - a.value).slice(0, 15);  // Limit to 15 items
+        }
+
+        // Function to load the charts for a specific chain
+        async function loadCharts(chain) {
+            try {
+                const data = await fetchData(chain);
+                const growthData = transformGrowthData(data);
+                const transactionsData = transformTransactionsData(data);
+
+                // Render the charts
+                createChart("growthChart", growthData, "+", true, chain);
+                createChart("transactionsChart", transactionsData, "", false, chain);
+            } catch (error) {
+                console.error("Error loading data:", error);
+            }
+        }
+
+        // Load Ethereum charts by default
+        loadCharts('ethereum');
+    </script>
+
+<a href="https://agnostic.dev/s/c/AmPha77Wk1D" target="_blank">
+<img src="/static/poweredBy.png" alt="Powered By" id="floating-image">
+</a>
+
+</body>
+</html>
