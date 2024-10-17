@@ -101,7 +101,6 @@ ERC20_ABI = [
     }
 ]
 
-# ERC-721 ABI snippet
 ERC721_ABI = [
     {
         "constant": True,
@@ -116,21 +115,35 @@ ERC721_ABI = [
         "name": "symbol",
         "outputs": [{"name": "", "type": "string"}],
         "type": "function"
+    },
+    {
+        "constant": True,
+        "inputs": [{"name": "interfaceId", "type": "bytes4"}],
+        "name": "supportsInterface",
+        "outputs": [{"name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function"
     }
 ]
 
-# Function to determine if the contract is ERC-20 or ERC-721
+# Function to determine if the contract is ERC-721
 def is_erc721(web3, token_address):
     try:
-        # Try calling the `supports_interface` function for ERC-721 (0x80ac58cd)
+        # ERC-721 interface ID (0x80ac58cd)
         erc721_interface_id = Web3.to_bytes(hexstr="0x80ac58cd")
+        
+        # Create contract instance
         contract = web3.eth.contract(address=Web3.to_checksum_address(token_address), abi=ERC721_ABI)
-        return contract.functions.supports_interface(erc721_interface_id).call()
-    except Exception:
+        
+        # Check if the contract supports the ERC-721 interface
+        return contract.functions.supportsInterface(erc721_interface_id).call()
+    
+    except Exception as e:
+        print(f"Error checking ERC-721 support for {token_address}: {e}")
         return False
 
 
-# Function to get token name, symbol, and decimals using Web3 and Infura
+# Function to get token info from Infura, handling both ERC-20 and ERC-721
 def get_token_info(chain, token_address):
     try:
         # Get the appropriate RPC URL for the chain
@@ -139,30 +152,29 @@ def get_token_info(chain, token_address):
         # Initialize Web3 connection
         web3 = Web3(Web3.HTTPProvider(rpc_url))
         
-        # Check if connected by querying the latest block number (alternative to is_connected())
-        try:
-            web3.eth.block_number
-        except Exception as e:
-            raise Exception(f"Failed to connect to {chain} via Infura: {e}")
-
-        # Determine if the contract is ERC-20 or ERC-721
+        # Check connection by querying the latest block number
+        web3.eth.block_number
+        
+        # If it's an ERC-721 token
         if is_erc721(web3, token_address):
-            # ERC-721 Token
             token_contract = web3.eth.contract(address=Web3.to_checksum_address(token_address), abi=ERC721_ABI)
             token_name = token_contract.functions.name().call()
             token_symbol = token_contract.functions.symbol().call()
             token_decimals = None  # ERC-721 tokens do not have decimals
+            return token_name, token_symbol, token_decimals, 'ERC-721'
+        
+        # Otherwise, treat as an ERC-20 token
         else:
-            # ERC-20 Token
             token_contract = web3.eth.contract(address=Web3.to_checksum_address(token_address), abi=ERC20_ABI)
             token_name = token_contract.functions.name().call()
             token_symbol = token_contract.functions.symbol().call()
             token_decimals = token_contract.functions.decimals().call()
-
-        return token_name, token_symbol, token_decimals
+            return token_name, token_symbol, token_decimals, 'ERC-20'
+    
     except Exception as e:
+        # Fallback if the token info can't be fetched
         print(f"Error fetching token info for {token_address} on {chain}: {e}")
-        return 'Unknown', 'Unknown', None  # Default to 'Unknown' and None decimals if something goes wrong
+        return 'Unknown', 'Unknown', None, 'Unknown'
 
 # Function to fetch token activity data based on the chain
 def fetch_token_activity_data(chain: str) -> List[Dict]:
@@ -256,18 +268,17 @@ def fetch_token_activity_data(chain: str) -> List[Dict]:
     for token in results:
         address = token['token_address']
         
-        # Use the get_token_info function to get name, symbol, and decimals
-        name, symbol, decimals = get_token_info(chain, address)
+        # Get name, symbol, decimals, and token type
+        name, symbol, decimals, token_type = get_token_info(chain, address)
         
-        # Determine token type based on decimals (ERC-20 usually has decimals, ERC-721 does not)
-        if decimals is None:
-            token_type = 'ERC-721'
+        # Update the label to include the decimals in brackets
+        if decimals is not None:
+            token['label'] = f"{name} ({symbol}) [{decimals}]"
         else:
-            token_type = 'ERC-20'
-        
-        token['label'] = f"{name} ({symbol})"
+            token['label'] = f"{name} ({symbol})"
+
         token['token_type'] = token_type
-        token['decimals'] = decimals if decimals is not None else 'N/A'  # No decimals for ERC-721 tokens
+        token['decimals'] = decimals if decimals is not None else 'N/A'
 
 
     cur.close()
